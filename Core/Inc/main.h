@@ -34,7 +34,8 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "lv_conf.h"
+#include "lvgl.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -56,7 +57,9 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void lv_epd_init(void);
+void lv_epd_task_handler(void);
+void lv_epd_create_test_ui(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -86,7 +89,18 @@ void Error_Handler(void);
 #define RST_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define	 MAX_LINE_BYTES   16
+#define  MAX_COLUMN_BYTES 250
+#define  ALLSCREEN_BYTES  4000
 
+#define	 X_Addr_Start    0x01
+#define  X_Addr_End      0x10
+
+
+#define  Y_Addr_Start_H  0x00
+#define  Y_Addr_Start_L  0xF4
+#define  Y_Addr_End_H    0x00
+#define  Y_Addr_End_L    0x00
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
