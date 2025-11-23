@@ -38,6 +38,7 @@ void EPD_Read_Busy(void);
 void EPD_Write_Command(uint8_t command);
 void EPD_Write_Data(uint8_t data);
 void EPD_Init(void); // New Initialization function
+void EPD_Update_and_Deepsleep_full_update(void);
 void EPD_Test_Sequence(void);
 /* USER CODE END PD */
 
@@ -83,48 +84,41 @@ static lv_color_t buf_1[128 * 250]; /* Display buffer - 128 pixels wide, 32 line
   */
 void lv_epd_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p)
 {
-    /* Debug output */
     printf("LVGL Flush: Area (%d,%d)-(%d,%d) Size: %dx%d\n",
            area->x1, area->y1, area->x2, area->y2,
            area->x2 - area->x1 + 1, area->y2 - area->y1 + 1);
 
-    /* Convert LVGL color data to EPD monochrome format */
     uint32_t x, y;
     uint32_t width = area->x2 - area->x1 + 1;
     uint32_t height = area->y2 - area->y1 + 1;
 
-    /* Set the update area */
     EPD_Init();
-
-    /* Write image data */
     EPD_Write_Command(0x24); /* Write Black/White RAM */
 
+    // Iterate through lines, starting from the BOTTOM of the LVGL buffer
     for(y = 0; y < height; y++) {
+        // Calculate the starting index for the current line in the LVGL buffer
+        // (height - 1 - y) maps the bottom line of the buffer to the first line sent to the EPD
+        uint32_t buffer_line_start_index = (height - 1 - y) * width;
+
         for(x = 0; x < (width + 7) / 8; x++) {
             uint8_t byte_data = 0;
             uint32_t bit_pos;
 
             for(bit_pos = 0; bit_pos < 8; bit_pos++) {
-                // Calculate the relative X coordinate within the current 8-bit block (0 to 7)
                 uint32_t relative_x_in_byte = (x * 8 + bit_pos);
 
-                // --- MODIFICATION HERE: Check if the pixel is within the actual width ---
-            	if (relative_x_in_byte < width) {
+                if (relative_x_in_byte < width) {
 
-                    // Calculate the buffer index using the correct relative X position
-                    // We can stick to the existing linear index calculation since 'width' handles the stride
-            	    uint32_t buffer_index = y * width + relative_x_in_byte;
+                    // Access the pixel using the calculated buffer line start index
+                    uint32_t buffer_index = buffer_line_start_index + relative_x_in_byte;
 
-                    // A safer bounds check (already covered by relative_x_in_byte < width check above)
-            	    // if (buffer_index < width * height)
-                    {
-            	        lv_color_t pixel_color = color_p[buffer_index];
+                    lv_color_t pixel_color = color_p[buffer_index];
 
-                        /* Convert LVGL color to monochrome (1 = white, 0 = black) */
-                        if(pixel_color.full != 0) { /* White */
-                            // This bit assignment assumes a specific hardware expectation (e.g. MSB first data)
-                            byte_data |= (1 << (7 - bit_pos));
-                        }
+                    /* Convert LVGL color to monochrome (1 = white, 0 = black) */
+                    if(pixel_color.full != 0) { /* White */
+                        // Use your correct bit packing order
+                        byte_data |= (1 << (7 - bit_pos));
                     }
                 }
             }
@@ -133,8 +127,6 @@ void lv_epd_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * colo
     }
 
     EPD_Update_and_Deepsleep_full_update();
-
-    /* Inform LVGL that flushing is done */
     lv_disp_flush_ready(drv);
 }
 
@@ -710,13 +702,18 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  /* Initialize EPD hardware */
-//  EPD_Test_Sequence();
+
 
 
 
   /* Initialize LVGL with EPD display */
   lv_epd_init();
+
+
+  /* Initialize EPD hardware */
+  EPD_Test_Sequence();
+
+  EPD_Delay_ms(2000);
 ////
 ////  /* Create test UI */
   lv_epd_create_test_ui();
