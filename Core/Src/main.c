@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "lvgl.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -235,6 +236,7 @@ void lv_epd_create_test_ui(void)
     /* Create a simple label */
     lv_obj_t * label = lv_label_create(lv_scr_act());
     lv_label_set_text(label, "Hello");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
 }
@@ -670,8 +672,8 @@ void EPD_Test_Sequence(void)
     EPD_Write_Command(0x24); // Command 0x24: Load image to Black/White RAM
     for(int i = 0; i < ALLSCREEN_BYTES; i++)
     {
-        EPD_Write_Data(image_buffer[i]); // Send 4000 bytes of image data
-//        EPD_Write_Data(0x00); // Send 4000 bytes of image data
+//        EPD_Write_Data(image_buffer[i]); // Send 4000 bytes of image data
+        EPD_Write_Data(0x00); // Send 4000 bytes of image data
     }
 
     EPD_Update_and_Deepsleep_full_update();
@@ -729,17 +731,37 @@ void update_display_with_sensor_data(void)
     // Clear the screen
     lv_obj_clean(lv_scr_act());
     
-    // Create temperature label
-    lv_obj_t *temp_label = lv_label_create(lv_scr_act());
-    snprintf(temp_str, sizeof(temp_str), "Temp: %.1f°C", current_temperature);
-    lv_label_set_text(temp_label, temp_str);
-    lv_obj_align(temp_label, LV_ALIGN_TOP_MID, 0, 20);
+    // Create table
+    lv_obj_t *table = lv_table_create(lv_scr_act());
     
-    // Create humidity label
-    lv_obj_t *hum_label = lv_label_create(lv_scr_act());
-    snprintf(hum_str, sizeof(hum_str), "Humidity: %.1f%%", current_humidity);
-    lv_label_set_text(hum_label, hum_str);
-    lv_obj_align(hum_label, LV_ALIGN_TOP_MID, 0, 50);
+    // Set table size (3 rows, 2 columns)
+    lv_table_set_row_cnt(table, 3);
+    lv_table_set_col_cnt(table, 2);
+    
+    // Set column widths
+    lv_table_set_col_width(table, 0, 100);  // Parameter column
+    lv_table_set_col_width(table, 1, 120);  // Value column
+    
+    // Set table cell text
+    lv_table_set_cell_value(table, 0, 0, "Parameter");
+    lv_table_set_cell_value(table, 0, 1, "Value");
+    
+    snprintf(temp_str, sizeof(temp_str), "%.1f°C", current_temperature);
+    snprintf(hum_str, sizeof(hum_str), "%.1f%%", current_humidity);
+    
+    lv_table_set_cell_value(table, 1, 0, "Temp.");
+    lv_table_set_cell_value(table, 1, 1, temp_str);
+    lv_table_set_cell_value(table, 2, 0, "Humidity");
+    lv_table_set_cell_value(table, 2, 1, hum_str);
+    
+    // Set table style
+    lv_obj_set_style_text_font(table, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_border_width(table, 2, 0);
+    lv_obj_set_style_border_color(table, lv_color_black(), 0);
+    lv_obj_set_style_pad_all(table, 8, 0);
+    
+    // Center the table on screen
+    lv_obj_align(table, LV_ALIGN_CENTER, 0, 0);
     
     // Force display refresh
     lv_refr_now(NULL);
@@ -820,9 +842,9 @@ int main(void)
   lv_epd_init();
 
   /* Initialize EPD hardware */
-//  EPD_Test_Sequence();
+  EPD_Test_Sequence();
 
-//  EPD_Delay_ms(2000);
+  EPD_Delay_ms(2000);
 ////
 ////  /* Create test UI */
 //  lv_epd_create_test_ui();
@@ -832,9 +854,24 @@ int main(void)
       update_display_with_sensor_data();
   } else {
       // Display error message if sensor read fails
-      lv_obj_t *error_label = lv_label_create(lv_scr_act());
-      lv_label_set_text(error_label, "Sensor Error");
-      lv_obj_align(error_label, LV_ALIGN_CENTER, 0, 0);
+      lv_obj_t *error_table = lv_table_create(lv_scr_act());
+      
+      // Set table size (2 rows, 1 column)
+      lv_table_set_row_cnt(error_table, 2);
+      lv_table_set_col_cnt(error_table, 1);
+      
+      // Set table cell text
+      lv_table_set_cell_value(error_table, 0, 0, "Status");
+      lv_table_set_cell_value(error_table, 1, 0, "Sensor Error");
+      
+      // Set table style
+      lv_obj_set_style_text_font(error_table, &lv_font_montserrat_16, 0);
+      lv_obj_set_style_border_width(error_table, 2, 0);
+      lv_obj_set_style_border_color(error_table, lv_color_black(), 0);
+      lv_obj_set_style_pad_all(error_table, 8, 0);
+      
+      // Center the table on screen
+      lv_obj_align(error_table, LV_ALIGN_CENTER, 0, 0);
   }
 
   last_sensor_read_time = HAL_GetTick();
