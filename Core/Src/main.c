@@ -31,7 +31,7 @@
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-///* USER CODE BEGIN PD */
+/* USER CODE BEGIN PD */
 // Function Prototypes
 void EPD_Delay_ms(uint32_t ms);
 void EPD_Read_Busy(void);
@@ -50,11 +50,16 @@ void EPD_Test_Sequence(void);
 /* Private variables ---------------------------------------------------------*/
 
 COM_InitTypeDef BspCOMInit;
+CRC_HandleTypeDef hcrc;
+
+I2C_HandleTypeDef hi2c3;
+
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
 
 /* USER CODE BEGIN PV */
-
+static volatile int update_chunks_remaining = 0;
+static volatile bool full_update_in_progress = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,6 +68,8 @@ void PeriphCommonClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_CRC_Init(void);
+static void MX_I2C3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -92,37 +99,47 @@ void lv_epd_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * colo
     uint32_t width = area->x2 - area->x1 + 1;
     uint32_t height = area->y2 - area->y1 + 1;
 
+    // Define the required bytes per line for the EPD RAM
+    // This seems critical based on your prompt (e.g., for a 128xY display)
+    const uint32_t EPD_BYTES_PER_LINE = 16;
+
     EPD_Init();
     EPD_Write_Command(0x24); /* Write Black/White RAM */
 
-    // Iterate through lines, starting from the BOTTOM of the LVGL buffer
+    // Iterate through lines, starting from the TOP of the LVGL buffer
     for(y = 0; y < height; y++) {
         // Calculate the starting index for the current line in the LVGL buffer
-        // (height - 1 - y) maps the bottom line of the buffer to the first line sent to the EPD
-        uint32_t buffer_line_start_index = (height - 1 - y) * width;
+        // No reversal needed.
+        uint32_t buffer_line_start_index = y * width;
 
-        for(x = 0; x < (width + 7) / 8; x++) {
+        // We write exactly 16 bytes to the EPD hardware for every logical line
+        for(x = 0; x < EPD_BYTES_PER_LINE; x++) {
             uint8_t byte_data = 0;
             uint32_t bit_pos;
 
             for(bit_pos = 0; bit_pos < 8; bit_pos++) {
                 uint32_t relative_x_in_byte = (x * 8 + bit_pos);
 
+                // Only access pixels within the actual valid width of the LVGL buffer area
                 if (relative_x_in_byte < width) {
 
                     // Access the pixel using the calculated buffer line start index
+                    // This uses the standard LVGL ordering (top-to-bottom, left-to-right)
                     uint32_t buffer_index = buffer_line_start_index + relative_x_in_byte;
 
                     lv_color_t pixel_color = color_p[buffer_index];
 
                     /* Convert LVGL color to monochrome (1 = white, 0 = black) */
                     if(pixel_color.full != 0) { /* White */
-                        // Use your correct bit packing order
+                        // Use your correct bit packing order (MSB first)
                         byte_data |= (1 << (7 - bit_pos));
                     }
                 }
+                // If relative_x_in_byte >= width, the pixel remains 0 (black),
+                // which pads the rest of the 16 bytes line correctly.
             }
             EPD_Write_Data(byte_data);
+//            EPD_Write_Data(0xFF);
         }
     }
 
@@ -189,17 +206,9 @@ void lv_epd_create_test_ui(void)
 
     /* Create a simple label */
     lv_obj_t * label = lv_label_create(lv_scr_act());
-    lv_label_set_text(label, "HELLO");
+    lv_label_set_text(label, "Hello");
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
-//    /* Create a button */
-    lv_obj_t * btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn, 80, 30);
-    lv_obj_align(btn, LV_ALIGN_CENTER, 0, 40);
-
-    lv_obj_t * btn_label = lv_label_create(btn);
-    lv_label_set_text(btn_label, "Button");
-    lv_obj_center(btn_label);
 }
 
 
@@ -214,11 +223,11 @@ void lv_epd_create_test_ui(void)
 void EPD_Init(void)
 {
     // --- 1. HARDWARE RESET SEQUENCE ---
-	EPD_Delay_ms(10); // delay >200us
+	EPD_Delay_ms(1); // delay >200us
     HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_RESET); // RES# low
-    EPD_Delay_ms(10); // delay >200us
+    EPD_Delay_ms(1); // delay >200us
     HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_SET);   // RES# high
-    EPD_Delay_ms(10); // delay >200us
+    EPD_Delay_ms(1); // delay >200us
     EPD_Read_Busy(); // Wait for busy low
 
     // --- 2. SOFTWARE RESET ---
@@ -634,6 +643,7 @@ void EPD_Test_Sequence(void)
     for(int i = 0; i < ALLSCREEN_BYTES; i++)
     {
         EPD_Write_Data(image_buffer[i]); // Send 4000 bytes of image data
+//        EPD_Write_Data(0x00); // Send 4000 bytes of image data
     }
 
     EPD_Update_and_Deepsleep_full_update();
@@ -674,6 +684,9 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_SPI1_Init();
+  MX_CRC_Init();
+  MX_I2C3_Init();
+
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -711,19 +724,19 @@ int main(void)
 
 
   /* Initialize EPD hardware */
-  EPD_Test_Sequence();
+//  EPD_Test_Sequence();
 
-  EPD_Delay_ms(2000);
+//  EPD_Delay_ms(2000);
 ////
 ////  /* Create test UI */
   lv_epd_create_test_ui();
-  lv_epd_task_handler();
+
   while (1)
   {
 
-
+	lv_epd_task_handler();
     /* Small delay to prevent excessive CPU usage */
-    HAL_Delay(100);
+    HAL_Delay(30000);
 
     /* USER CODE END WHILE */
 
@@ -804,6 +817,85 @@ void PeriphCommonClock_Config(void)
 }
 
 /**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
+  hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
+  hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
+  hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x00B07CB4;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -826,7 +918,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -910,6 +1002,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(RST_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB6 PB7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /**/
   __HAL_SYSCFG_FASTMODEPLUS_ENABLE(SYSCFG_FASTMODEPLUS_PB8);
