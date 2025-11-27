@@ -106,11 +106,12 @@ void lv_epd_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * colo
     EPD_Init();
     EPD_Write_Command(0x24); /* Write Black/White RAM */
 
-    // Iterate through lines, starting from the TOP of the LVGL buffer
+    // Iterate through lines, starting from the BOTTOM of the LVGL buffer
+    // LVGL buffer is top-down, EPD expects bottom-up
     for(y = 0; y < height; y++) {
         // Calculate the starting index for the current line in the LVGL buffer
-        // No reversal needed.
-        uint32_t buffer_line_start_index = y * width;
+        // Reverse Y direction: bottom-up for EPD
+        uint32_t buffer_line_start_index = (height - 1 - y) * width;
 
         // We write exactly 16 bytes to the EPD hardware for every logical line
         for(x = 0; x < EPD_BYTES_PER_LINE; x++) {
