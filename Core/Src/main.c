@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,6 +41,12 @@ void EPD_Write_Data(uint8_t data);
 void EPD_Init(void); // New Initialization function
 void EPD_Update_and_Deepsleep_full_update(void);
 void EPD_Test_Sequence(void);
+
+// SHT45 I2C Driver
+#define SHT45_I2C_ADDRESS 0x44
+#define SHT45_CMD_MEASURE_HIGH_PRECISION 0xFD
+
+HAL_StatusTypeDef SHT45_Read_Temp_Humidity(float *temperature, float *humidity);
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -60,6 +67,9 @@ DMA_HandleTypeDef hdma_spi1_tx;
 /* USER CODE BEGIN PV */
 static volatile int update_chunks_remaining = 0;
 static volatile bool full_update_in_progress = false;
+static uint32_t last_sensor_read_time = 0;
+static float current_temperature = 0.0f;
+static float current_humidity = 0.0f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -649,6 +659,75 @@ void EPD_Test_Sequence(void)
 
     EPD_Update_and_Deepsleep_full_update();
 }
+/**
+  * @brief  Read temperature and humidity from SHT45 sensor
+  * @param  temperature: pointer to store temperature value
+  * @param  humidity: pointer to store humidity value
+  * @retval HAL status
+  */
+HAL_StatusTypeDef SHT45_Read_Temp_Humidity(float *temperature, float *humidity)
+{
+    uint8_t cmd = SHT45_CMD_MEASURE_HIGH_PRECISION;
+    uint8_t rx_data[6];
+    
+    // Send measurement command
+    HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(&hi2c3, SHT45_I2C_ADDRESS << 1, &cmd, 1, 100);
+    if (status != HAL_OK) {
+        return status;
+    }
+    
+    // Wait for measurement to complete (high precision takes ~10ms)
+    HAL_Delay(15);
+    
+    // Read measurement data (6 bytes: 2 temp, 1 CRC, 2 humidity, 1 CRC)
+    status = HAL_I2C_Master_Receive(&hi2c3, SHT45_I2C_ADDRESS << 1, rx_data, 6, 100);
+    if (status != HAL_OK) {
+        return status;
+    }
+    
+    // Convert temperature data (first 2 bytes)
+    uint16_t temp_raw = (rx_data[0] << 8) | rx_data[1];
+    *temperature = -45.0f + 175.0f * ((float)temp_raw / 65535.0f);
+    
+    // Convert humidity data (bytes 3-4)
+    uint16_t hum_raw = (rx_data[3] << 8) | rx_data[4];
+    *humidity = -6.0f + 125.0f * ((float)hum_raw / 65535.0f);
+    
+    // Clamp humidity to valid range
+    if (*humidity < 0.0f) *humidity = 0.0f;
+    if (*humidity > 100.0f) *humidity = 100.0f;
+    
+    return HAL_OK;
+}
+
+/**
+  * @brief  Update display with temperature and humidity data
+  * @retval None
+  */
+void update_display_with_sensor_data(void)
+{
+    char temp_str[16];
+    char hum_str[16];
+    
+    // Clear the screen
+    lv_obj_clean(lv_scr_act());
+    
+    // Create temperature label
+    lv_obj_t *temp_label = lv_label_create(lv_scr_act());
+    snprintf(temp_str, sizeof(temp_str), "Temp: %.1f°C", current_temperature);
+    lv_label_set_text(temp_label, temp_str);
+    lv_obj_align(temp_label, LV_ALIGN_TOP_MID, 0, 20);
+    
+    // Create humidity label
+    lv_obj_t *hum_label = lv_label_create(lv_scr_act());
+    snprintf(hum_str, sizeof(hum_str), "Humidity: %.1f%%", current_humidity);
+    lv_label_set_text(hum_label, hum_str);
+    lv_obj_align(hum_label, LV_ALIGN_TOP_MID, 0, 50);
+    
+    // Force display refresh
+    lv_refr_now(NULL);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -723,19 +802,39 @@ int main(void)
   /* Initialize LVGL with EPD display */
   lv_epd_init();
 
-
   /* Initialize EPD hardware */
 //  EPD_Test_Sequence();
 
 //  EPD_Delay_ms(2000);
 ////
 ////  /* Create test UI */
-  lv_epd_create_test_ui();
+//  lv_epd_create_test_ui();
+
+  // Initial sensor read
+  if (SHT45_Read_Temp_Humidity(&current_temperature, &current_humidity) == HAL_OK) {
+      update_display_with_sensor_data();
+  } else {
+      // Display error message if sensor read fails
+      lv_obj_t *error_label = lv_label_create(lv_scr_act());
+      lv_label_set_text(error_label, "Sensor Error");
+      lv_obj_align(error_label, LV_ALIGN_CENTER, 0, 0);
+  }
+
+  last_sensor_read_time = HAL_GetTick();
 
   while (1)
   {
-
-	lv_epd_task_handler();
+    lv_epd_task_handler();
+    
+    // Check if 30 seconds have passed since last sensor read
+    if ((HAL_GetTick() - last_sensor_read_time) >= 30000) {
+        // Read sensor data
+        if (SHT45_Read_Temp_Humidity(&current_temperature, &current_humidity) == HAL_OK) {
+            update_display_with_sensor_data();
+        }
+        last_sensor_read_time = HAL_GetTick();
+    }
+    
     /* Small delay to prevent excessive CPU usage */
     HAL_Delay(30000);
 
