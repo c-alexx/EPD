@@ -90,7 +90,7 @@ static void MX_I2C3_Init(void);
 /* LVGL EPD Display Driver */
 static lv_disp_drv_t disp_drv;
 static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf_1[128 * 250]; /* Display buffer - 128 pixels wide, 32 lines */
+static lv_color_t buf_1[250 * 122]; /* Display buffer - 250 pixels wide, 122 lines */
 
 /**
   * @brief  Flush the content of the internal buffer to the EPD
@@ -189,12 +189,12 @@ void lv_epd_init(void)
     lv_init();
 
     /* Initialize display buffer */
-    lv_disp_draw_buf_init(&draw_buf, buf_1, NULL, 128 * 250);
+    lv_disp_draw_buf_init(&draw_buf, buf_1, NULL, 250 * 122);
 
     /* Initialize display driver */
     lv_disp_drv_init(&disp_drv);
-    disp_drv.hor_res = 122;
-    disp_drv.ver_res = 250;
+    disp_drv.hor_res = 250;
+    disp_drv.ver_res = 122;
     disp_drv.flush_cb = lv_epd_flush;
     disp_drv.draw_buf = &draw_buf;
     disp_drv.full_refresh = 1; /* Use full refresh until basic display works */
