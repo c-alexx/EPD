@@ -109,48 +109,65 @@ void lv_epd_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * colo
     uint32_t width = area->x2 - area->x1 + 1;
     uint32_t height = area->y2 - area->y1 + 1;
 
-    // Define the required bytes per line for the EPD RAM
-    // This seems critical based on your prompt (e.g., for a 128xY display)
-    const uint32_t EPD_BYTES_PER_LINE = 16;
+    // EPD configuration: 122H (horizontal) packed into bytes, 250V (vertical)
+    // LVGL buffer: 122V x 250H (rotated 90 degrees)
+    const uint32_t EPD_BYTES_PER_LINE = 16; // 122 pixels / 8 = 15.25 -> 16 bytes
 
     EPD_Init();
     EPD_Write_Command(0x24); /* Write Black/White RAM */
 
-    // Iterate through lines, starting from the BOTTOM of the LVGL buffer
-    // LVGL buffer is top-down, EPD expects bottom-up
-    for(y = 0; y < height; y++) {
-        // Calculate the starting index for the current line in the LVGL buffer
-        // Reverse Y direction: bottom-up for EPD
-        uint32_t buffer_line_start_index = (height - 1 - y) * width;
-
-        // We write exactly 16 bytes to the EPD hardware for every logical line
+    // Rotate 90 degrees: LVGL (122V x 250H) -> EPD (122H x 250V)
+    // LVGL: top-to-bottom, left-to-right
+    // EPD: bottom-up, right-to-left (landscape mode)
+    
+    // For each vertical line in EPD (250 lines)
+    for(y = 0; y < 250; y++) {
+        // For each byte in the horizontal line (16 bytes for 122 pixels)
         for(x = 0; x < EPD_BYTES_PER_LINE; x++) {
             uint8_t byte_data = 0;
             uint32_t bit_pos;
 
+            // Process 8 bits per byte
             for(bit_pos = 0; bit_pos < 8; bit_pos++) {
-                uint32_t relative_x_in_byte = (x * 8 + bit_pos);
-
-                // Only access pixels within the actual valid width of the LVGL buffer area
-                if (relative_x_in_byte < width) {
-
-                    // Access the pixel using the calculated buffer line start index
-                    // This uses the standard LVGL ordering (top-to-bottom, left-to-right)
-                    uint32_t buffer_index = buffer_line_start_index + relative_x_in_byte;
-
-                    lv_color_t pixel_color = color_p[buffer_index];
-
-                    /* Convert LVGL color to monochrome (1 = white, 0 = black) */
-                    if(pixel_color.full != 0) { /* White */
-                        // Use your correct bit packing order (MSB first)
-                        byte_data |= (1 << (7 - bit_pos));
+                uint32_t pixel_x_in_epd = (x * 8 + bit_pos);
+                
+                // Only process valid pixels within 122 horizontal range
+                if (pixel_x_in_epd < 122) {
+                    // 90-degree rotation mapping:
+                    // LVGL x coordinate becomes EPD y coordinate (rotated)
+                    // LVGL y coordinate becomes EPD x coordinate (rotated)
+                    
+                    // Map EPD coordinates to LVGL coordinates:
+                    // EPD x (0-121) -> LVGL y (0-121)
+                    // EPD y (0-249) -> LVGL x (0-249)
+                    
+                    // For bottom-up, right-to-left EPD:
+                    // - Reverse Y direction (bottom-up): 249 - y
+                    // - Reverse X direction (right-to-left): 121 - pixel_x_in_epd
+                    
+                    uint32_t lvgl_x = 249 - y;  // Reverse Y for bottom-up
+                    uint32_t lvgl_y = 121 - pixel_x_in_epd;  // Reverse X for right-to-left
+                    
+                    // Check if the mapped coordinates are within the current flush area
+                    if (lvgl_x >= area->x1 && lvgl_x <= area->x2 && 
+                        lvgl_y >= area->y1 && lvgl_y <= area->y2) {
+                        
+                        // Calculate buffer index in LVGL buffer
+                        uint32_t buffer_index = (lvgl_y - area->y1) * width + (lvgl_x - area->x1);
+                        
+                        if (buffer_index < width * height) {
+                            lv_color_t pixel_color = color_p[buffer_index];
+                            
+                            /* Convert LVGL color to monochrome (1 = white, 0 = black) */
+                            if(pixel_color.full != 0) { /* White */
+                                // MSB first bit packing
+                                byte_data |= (1 << (7 - bit_pos));
+                            }
+                        }
                     }
                 }
-                // If relative_x_in_byte >= width, the pixel remains 0 (black),
-                // which pads the rest of the 16 bytes line correctly.
             }
             EPD_Write_Data(byte_data);
-//            EPD_Write_Data(0xFF);
         }
     }
 
