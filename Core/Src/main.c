@@ -674,7 +674,7 @@ void EPD_Test_Sequence(void)
     for(int i = 0; i < ALLSCREEN_BYTES; i++)
     {
 //        EPD_Write_Data(image_buffer[i]); // Send 4000 bytes of image data
-        EPD_Write_Data(0x00); // Send 4000 bytes of image data
+        EPD_Write_Data(0xFF); // Send 4000 bytes of image data
     }
 
     EPD_Update_and_Deepsleep_full_update();
@@ -798,7 +798,7 @@ void enter_stop2_mode(void)
     __HAL_RTC_WAKEUPTIMER_CLEAR_FLAG(hrtc_ptr, RTC_FLAG_WUTF);
     
     // Enter Stop 2 mode
-    HAL_PWR_EnterSTOP2Mode(PWR_STOPENTRY_WFI);
+    HAL_PWREx_EnterSTOP2Mode(PWR_STOPENTRY_WFI);
     
     // After wake-up, reinitialize the HAL library to restore the clock
     // The system clock will be restored to MSI by default after wake-up from STOP2
@@ -917,27 +917,23 @@ int main(void)
 
   last_sensor_read_time = HAL_GetTick();
 
-  while (1)
-  {
-    lv_epd_task_handler();
-    
-    // Check if 30 seconds have passed since last sensor read
-    if ((HAL_GetTick() - last_sensor_read_time) >= 30000) {
-        // Read sensor data
-        if (SHT45_Read_Temp_Humidity(&current_temperature, &current_humidity) == HAL_OK) {
-            update_display_with_sensor_data();
-        }
-        last_sensor_read_time = HAL_GetTick();
-    }
-    
-    /* Enter Stop 2 mode for 30 seconds to save power */
-    enter_stop2_mode();
+	while (1) {
 
-    /* USER CODE END WHILE */
+		// Read sensor data
+		if (SHT45_Read_Temp_Humidity(&current_temperature, &current_humidity)
+				== HAL_OK) {
+			update_display_with_sensor_data();
+		}
+		lv_epd_task_handler();
 
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
+		/* Enter Stop 2 mode for 30 seconds to save power */
+		enter_stop2_mode();
+
+		/* USER CODE END WHILE */
+
+		/* USER CODE BEGIN 3 */
+	}
+	/* USER CODE END 3 */
 }
 
 /**
