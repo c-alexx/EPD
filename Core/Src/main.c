@@ -42,6 +42,7 @@ void EPD_Write_Data(uint8_t data);
 void EPD_Init(void); // New Initialization function
 void EPD_Update_and_Deepsleep_full_update(void);
 void EPD_Test_Sequence(void);
+void enter_stop2_mode(void);
 
 // SHT45 I2C Driver
 #define SHT45_I2C_ADDRESS 0x44
@@ -767,6 +768,47 @@ void update_display_with_sensor_data(void)
     lv_refr_now(NULL);
 }
 
+/**
+  * @brief  Enter Stop 2 mode for 30 seconds to save power
+  * @retval None
+  */
+void enter_stop2_mode(void)
+{
+    // Configure RTC wake-up for 30 seconds
+    RTC_HandleTypeDef *hrtc_ptr = &hrtc;
+    
+    // Disable RTC interrupts temporarily
+    HAL_NVIC_DisableIRQ(RTC_WKUP_IRQn);
+    
+    // Configure wake-up timer for 30 seconds
+    // RTC clock is 32768 Hz (LSE), with DIV16 this becomes 2048 Hz
+    // So for 30 seconds we need 30 * 2048 = 61440 cycles, so set to 61439 (0xF000-1)
+    if (HAL_RTCEx_SetWakeUpTimer_IT(hrtc_ptr, 61439, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
+    {
+        // If wake-up timer fails, use a short delay instead
+        HAL_Delay(1000);
+        return;
+    }
+    
+    // Enable RTC wake-up interrupt
+    HAL_NVIC_SetPriority(RTC_WKUP_IRQn, 0x00, 0x00);
+    HAL_NVIC_EnableIRQ(RTC_WKUP_IRQn);
+    
+    // Clear wake-up flag
+    __HAL_RTC_WAKEUPTIMER_CLEAR_FLAG(hrtc_ptr, RTC_FLAG_WUTF);
+    
+    // Enter Stop 2 mode
+    HAL_PWR_EnterSTOP2Mode(PWR_STOPENTRY_WFI);
+    
+    // After wake-up, reinitialize the HAL library to restore the clock
+    // The system clock will be restored to MSI by default after wake-up from STOP2
+    // We need to reconfigure it to the original configuration
+    SystemClock_Config();
+    
+    // Disable wake-up timer after waking up
+    HAL_RTCEx_DeactivateWakeUpTimer(hrtc_ptr);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -888,8 +930,8 @@ int main(void)
         last_sensor_read_time = HAL_GetTick();
     }
     
-    /* Small delay to prevent excessive CPU usage */
-    HAL_Delay(30000);
+    /* Enter Stop 2 mode for 30 seconds to save power */
+    enter_stop2_mode();
 
     /* USER CODE END WHILE */
 
