@@ -76,124 +76,63 @@ void HAL_MspInit(void)
 }
 
 /**
-  * @brief CRC MSP Initialization
+  * @brief RTC MSP Initialization
   * This function configures the hardware resources used in this example
-  * @param hcrc: CRC handle pointer
+  * @param hrtc: RTC handle pointer
   * @retval None
   */
-void HAL_CRC_MspInit(CRC_HandleTypeDef* hcrc)
+void HAL_RTC_MspInit(RTC_HandleTypeDef* hrtc)
 {
-  if(hcrc->Instance==CRC)
-  {
-    /* USER CODE BEGIN CRC_MspInit 0 */
-
-    /* USER CODE END CRC_MspInit 0 */
-    /* Peripheral clock enable */
-    __HAL_RCC_CRC_CLK_ENABLE();
-    /* USER CODE BEGIN CRC_MspInit 1 */
-
-    /* USER CODE END CRC_MspInit 1 */
-
-  }
-
-}
-
-/**
-  * @brief CRC MSP De-Initialization
-  * This function freeze the hardware resources used in this example
-  * @param hcrc: CRC handle pointer
-  * @retval None
-  */
-void HAL_CRC_MspDeInit(CRC_HandleTypeDef* hcrc)
-{
-  if(hcrc->Instance==CRC)
-  {
-    /* USER CODE BEGIN CRC_MspDeInit 0 */
-
-    /* USER CODE END CRC_MspDeInit 0 */
-    /* Peripheral clock disable */
-    __HAL_RCC_CRC_CLK_DISABLE();
-    /* USER CODE BEGIN CRC_MspDeInit 1 */
-
-    /* USER CODE END CRC_MspDeInit 1 */
-  }
-
-}
-
-/**
-  * @brief I2C MSP Initialization
-  * This function configures the hardware resources used in this example
-  * @param hi2c: I2C handle pointer
-  * @retval None
-  */
-void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-  if(hi2c->Instance==I2C3)
+  if(hrtc->Instance==RTC)
   {
-    /* USER CODE BEGIN I2C3_MspInit 0 */
+    /* USER CODE BEGIN RTC_MspInit 0 */
 
-    /* USER CODE END I2C3_MspInit 0 */
+    /* USER CODE END RTC_MspInit 0 */
+
+  /** Enable access to the backup domain
+  */
+    HAL_PWR_EnableBkUpAccess();
 
   /** Initializes the peripherals clock
   */
-    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2C3;
-    PeriphClkInitStruct.I2c3ClockSelection = RCC_I2C3CLKSOURCE_PCLK1;
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
     {
       Error_Handler();
     }
 
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    /**I2C3 GPIO Configuration
-    PC0     ------> I2C3_SCL
-    PC1     ------> I2C3_SDA
-    */
-    GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF4_I2C3;
-    HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
     /* Peripheral clock enable */
-    __HAL_RCC_I2C3_CLK_ENABLE();
-    /* USER CODE BEGIN I2C3_MspInit 1 */
+    __HAL_RCC_RTC_ENABLE();
+    __HAL_RCC_RTCAPB_CLK_ENABLE();
+    /* USER CODE BEGIN RTC_MspInit 1 */
 
-    /* USER CODE END I2C3_MspInit 1 */
+    /* USER CODE END RTC_MspInit 1 */
 
   }
 
 }
 
 /**
-  * @brief I2C MSP De-Initialization
+  * @brief RTC MSP De-Initialization
   * This function freeze the hardware resources used in this example
-  * @param hi2c: I2C handle pointer
+  * @param hrtc: RTC handle pointer
   * @retval None
   */
-void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
+void HAL_RTC_MspDeInit(RTC_HandleTypeDef* hrtc)
 {
-  if(hi2c->Instance==I2C3)
+  if(hrtc->Instance==RTC)
   {
-    /* USER CODE BEGIN I2C3_MspDeInit 0 */
+    /* USER CODE BEGIN RTC_MspDeInit 0 */
 
-    /* USER CODE END I2C3_MspDeInit 0 */
+    /* USER CODE END RTC_MspDeInit 0 */
     /* Peripheral clock disable */
-    __HAL_RCC_I2C3_CLK_DISABLE();
+    __HAL_RCC_RTC_DISABLE();
+    __HAL_RCC_RTCAPB_CLK_DISABLE();
+    /* USER CODE BEGIN RTC_MspDeInit 1 */
 
-    /**I2C3 GPIO Configuration
-    PC0     ------> I2C3_SCL
-    PC1     ------> I2C3_SDA
-    */
-    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_0);
-
-    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_1);
-
-    /* USER CODE BEGIN I2C3_MspDeInit 1 */
-
-    /* USER CODE END I2C3_MspDeInit 1 */
+    /* USER CODE END RTC_MspDeInit 1 */
   }
 
 }
